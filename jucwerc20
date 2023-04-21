@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract MyToken is ERC20, Pausable, Ownable {
+    
+    mapping(address => bool) private _blacklist;
+
+    event Blacklist(address indexed account);
+    event Whitelist(address indexed account);
+
+    constructor() ERC20("My Token", "MTK") {}
+
+    function mint(address to, uint256 amount) public onlyOwner {
+        _mint(to, amount);
+    }
+
+    function burn(uint256 amount) public {
+        _burn(msg.sender, amount);
+    }
+
+    function pause() public onlyOwner {
+        _pause();
+    }
+
+    function unpause() public onlyOwner {
+        _unpause();
+    }
+
+    function blacklist(address account) public onlyOwner {
+        require(!_blacklist[account], "MyToken: account is already blacklisted");
+        _blacklist[account] = true;
+        emit Blacklist(account);
+    }
+
+    function whitelist(address account) public onlyOwner {
+        require(_blacklist[account], "MyToken: account is not blacklisted");
+        _blacklist[account] = false;
+        emit Whitelist(account);
+    }
+
+    function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
+        require(!_blacklist[msg.sender], "MyToken: sender is blacklisted");
+        require(!_blacklist[recipient], "MyToken: recipient is blacklisted");
+        return super.transfer(recipient, amount);
+    }
+
+    function transferFrom(address sender, address recipient, uint256 amount) public virtual override returns (bool) {
+        require(!_blacklist[sender], "MyToken: sender is blacklisted");
+        require(!_blacklist[recipient], "MyToken: recipient is blacklisted");
+        return super.transferFrom(sender, recipient, amount);
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 amount) internal override whenNotPaused {
+        super._beforeTokenTransfer(from, to, amount);
+    }
+}
