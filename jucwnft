@@ -1,0 +1,94 @@
+use cosmwasm_std::{
+    entry_point,
+    entry_point_panic,
+    to_binary,
+    Binary,
+    Deps,
+    DepsMut,
+    Env,
+    MessageInfo,
+    QueryResponse,
+    Response,
+    StdError,
+    StdResult,
+};
+use cw20::Cw20ReceiveMsg;
+
+// Define a data structure to hold the NFT and its bidding status
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct NFTData {
+    pub id: String,
+    pub owner: String,
+    pub bidding_status: bool,
+}
+
+// Define a data structure to hold a bid and its status
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BidData {
+    pub bidder: String,
+    pub bid_amount: u128,
+    pub accepted: bool,
+}
+
+// Define a response structure for the bidding process
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BiddingResponse {
+    pub highest_bid: u128,
+    pub highest_bidder: String,
+    pub bidding_open: bool,
+    pub bidding_closed: bool,
+}
+
+// Define a smart contract to manage the bidding process
+#[entry_point]
+fn bid_on_nft(
+    deps: Deps,
+    env: Env,
+    info: MessageInfo,
+    msg: Cw20ReceiveMsg,
+) -> Result<Response, StdError> {
+    // Check that the sender is authorized to bid on the NFT
+    if info.sender != env.contract.address {
+        return Err(StdError::unauthorized());
+    }
+
+    // Query the NFT's bidding status
+    let query_msg = QueryResponse::new(b"nft".to_vec());
+    let nft_result = deps.querier.query(&query_msg)?;
+    let nft_data: NFTData = from_binary(&nft_result)?;
+
+    // Check that bidding is still open
+    if !nft_data.bidding_status {
+        return Err(StdError::generic_err("Bidding has closed"));
+    }
+
+    // Extract the bid amount from the message and check that it is higher than the current highest bid
+    let bid_amount = msg.amount;
+    if bid_amount < nft_data.highest_bid {
+        return Err(StdError::generic_err("Bid amount is too low"));
+    }
+
+    // Update the NFT's bidding status and record the new highest bid and bidder
+    let new_nft_data = NFTData {
+        id: nft_data.id,
+        owner: nft_data.owner,
+        bidding_status: true,
+        highest_bid: bid_amount,
+        highest_bidder: info.sender.clone(),
+    };
+    let nft_response = to_binary(&new_nft_data)?;
+    deps.storage.set(b"nft".to_vec(), nft_response);
+
+    // Record the new bid in the contract's state
+    let new_bid_data = BidData {
+        bidder: info.sender.clone(),
+        bid_amount: bid_amount,
+        accepted: false,
+    };
+    let bid_response = to_binary(&new_bid_data)?;
+    let bid_key = format!("bid-{}", info.sender);
+    deps.storage.set(bid_key.as_bytes().to_vec(), bid_response);
+
+    // Construct a response containing the new bidding status and highest bidder/bid amount
+    let response_data = BiddingResponse {
+        highest_bid: new_n
